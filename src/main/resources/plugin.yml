@@ -1,0 +1,22 @@
+name: SimpleBackPlus
+main: dev.rob2.simplebackplus.SimpleBackPlus
+version: 1.0.0
+api-version: 1.21
+author: Robert
+description: Minimal /back with persistent history for 1.21+ servers
+
+commands:
+  back:
+    description: Teleport to your previous location
+    usage: /back
+    permission: simplebackplus.use
+
+permissions:
+  simplebackplus.use:
+    description: Allows use of /back
+    default: true
+
+  simplebackplus.death:
+    description: Allows /back after death
+    default: true
+
