@@ -2,49 +2,60 @@ package dev.rob2.simplebackplus;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.*;
 
 public class SimpleBackPlus extends JavaPlugin {
 
-    private static SimpleBackPlus instance;
-
     private final Map<UUID, Deque<Location>> history = new HashMap<>();
-    private static final int MAX_HISTORY = 10;
-
-    // --- NEW: Cooldown storage ---
     private final Map<UUID, Long> backCooldowns = new HashMap<>();
-    private int cooldownSeconds;
+    private final Map<UUID, Long> deathTimestamps = new HashMap<>();
 
-    private File historyFile;
-    private YamlConfiguration historyConfig;
+    private int cooldownSeconds;
+    private int deathBlockSeconds;
 
     @Override
     public void onEnable() {
-        instance = this;
 
-        // Load config (for cooldown)
         saveDefaultConfig();
-        cooldownSeconds = getConfig().getInt("cooldown-seconds", 10);
+        loadSettings();
 
-        createHistoryFile();
-        loadHistory();
-
-        Bukkit.getPluginManager().registerEvents(new TeleportListener(this), this);
+        // Register command
         getCommand("back").setExecutor(new BackCommand(this));
 
-        getLogger().info("SimpleBackPlus enabled with persistent history and cooldown.");
+        // Register listeners
+        Bukkit.getPluginManager().registerEvents(new TeleportListener(this), this);
+
+        getLogger().info("SimpleBackPlus enabled.");
     }
 
-    public static SimpleBackPlus getInstance() {
-        return instance;
+    private void loadSettings() {
+        FileConfiguration config = getConfig();
+
+        cooldownSeconds = config.getInt("cooldown-seconds", 10);
+        deathBlockSeconds = config.getInt("death-block-seconds", 5);
     }
 
-    // --- NEW: Cooldown accessors ---
+    // --- HISTORY MANAGEMENT ---
+
+    public void pushLocation(UUID uuid, Location loc) {
+        history.computeIfAbsent(uuid, k -> new ArrayDeque<>()).push(loc);
+    }
+
+    public Location popLocation(UUID uuid) {
+        Deque<Location> stack = history.get(uuid);
+        if (stack == null || stack.isEmpty()) return null;
+        return stack.pop();
+    }
+
+    public boolean hasHistory(UUID uuid) {
+        return history.containsKey(uuid) && !history.get(uuid).isEmpty();
+    }
+
+    // --- COOLDOWN MANAGEMENT ---
+
     public Map<UUID, Long> getBackCooldowns() {
         return backCooldowns;
     }
@@ -53,87 +64,30 @@ public class SimpleBackPlus extends JavaPlugin {
         return cooldownSeconds;
     }
 
-    private void createHistoryFile() {
-        historyFile = new File(getDataFolder(), "history.yml");
-        if (!historyFile.exists()) {
-            historyFile.getParentFile().mkdirs();
-            saveResource("history.yml", false);
-        }
-        historyConfig = YamlConfiguration.loadConfiguration(historyFile);
+    // --- DEATH BLOCK SYSTEM ---
+
+    public void recordDeath(UUID uuid) {
+        deathTimestamps.put(uuid, System.currentTimeMillis());
     }
 
-    private void loadHistory() {
-        for (String uuidString : historyConfig.getKeys(false)) {
-            UUID uuid = UUID.fromString(uuidString);
-            List<Map<?, ?>> list = historyConfig.getMapList(uuidString);
+    public boolean isDeathBlocked(UUID uuid) {
+        if (!deathTimestamps.containsKey(uuid)) return false;
 
-            Deque<Location> stack = new ArrayDeque<>();
+        long lastDeath = deathTimestamps.get(uuid);
+        long now = System.currentTimeMillis();
+        long remaining = (lastDeath + (deathBlockSeconds * 1000L)) - now;
 
-            for (Map<?, ?> map : list) {
-                String world = (String) map.get("world");
-                double x = (double) map.get("x");
-                double y = (double) map.get("y");
-                double z = (double) map.get("z");
-
-                Location loc = new Location(
-                        Bukkit.getWorld(world), x, y, z
-                );
-
-                stack.push(loc);
-            }
-
-            history.put(uuid, stack);
-        }
+        return remaining > 0;
     }
 
-    public void saveHistory() {
-        for (UUID uuid : history.keySet()) {
-            Deque<Location> stack = history.get(uuid);
-            List<Map<String, Object>> list = new ArrayList<>();
+    public long getDeathRemaining(UUID uuid) {
+        if (!deathTimestamps.containsKey(uuid)) return 0;
 
-            for (Location loc : stack) {
-                Map<String, Object> map = new HashMap<>();
-                map.put("world", loc.getWorld().getName());
-                map.put("x", loc.getX());
-                map.put("y", loc.getY());
-                map.put("z", loc.getZ());
-                list.add(map);
-            }
+        long lastDeath = deathTimestamps.get(uuid);
+        long now = System.currentTimeMillis();
+        long remaining = (lastDeath + (deathBlockSeconds * 1000L)) - now;
 
-            historyConfig.set(uuid.toString(), list);
-        }
-
-        try {
-            historyConfig.save(historyFile);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void pushLocation(UUID uuid, Location loc) {
-        if (loc == null || loc.getWorld() == null) return;
-
-        Deque<Location> stack = history.computeIfAbsent(uuid, k -> new ArrayDeque<>());
-
-        if (stack.size() >= MAX_HISTORY) {
-            stack.removeLast();
-        }
-
-        stack.push(loc.clone());
-        saveHistory();
-    }
-
-    public Location popLocation(UUID uuid) {
-        Deque<Location> stack = history.get(uuid);
-        if (stack == null || stack.isEmpty()) return null;
-
-        Location loc = stack.pop();
-        saveHistory();
-        return loc;
-    }
-
-    public boolean hasHistory(UUID uuid) {
-        return history.containsKey(uuid) && !history.get(uuid).isEmpty();
+        return Math.max(remaining / 1000, 0);
     }
 }
 
