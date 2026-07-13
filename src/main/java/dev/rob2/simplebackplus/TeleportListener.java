@@ -25,6 +25,9 @@ public class TeleportListener implements Listener {
     public void onDeath(PlayerDeathEvent event) {
         Player player = event.getEntity();
 
+        // REQUIRED for death-block
+        plugin.recordDeath(player.getUniqueId());
+
         if (!player.hasPermission("simplebackplus.death")) return;
 
         plugin.pushLocation(player.getUniqueId(), player.getLocation());

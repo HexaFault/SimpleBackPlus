@@ -1,0 +1,10 @@
+# Cooldown before /back can be used again
+cooldown-seconds: 10
+
+# Block /back while in combat (CombatLogger integration)
+combat-block: true
+combat-message: "You cannot use /back while in combat. Time left: %seconds%s"
+
+# Block /back for X seconds after death
+death-block-seconds: 5
+death-block-message: "You cannot use /back right after dying. Wait %seconds%s."

@@ -16,6 +16,10 @@ public class SimpleBackPlus extends JavaPlugin {
     private final Map<UUID, Deque<Location>> history = new HashMap<>();
     private static final int MAX_HISTORY = 10;
 
+    // --- NEW: Cooldown storage ---
+    private final Map<UUID, Long> backCooldowns = new HashMap<>();
+    private int cooldownSeconds;
+
     private File historyFile;
     private YamlConfiguration historyConfig;
 
@@ -23,17 +27,30 @@ public class SimpleBackPlus extends JavaPlugin {
     public void onEnable() {
         instance = this;
 
+        // Load config (for cooldown)
+        saveDefaultConfig();
+        cooldownSeconds = getConfig().getInt("cooldown-seconds", 10);
+
         createHistoryFile();
         loadHistory();
 
         Bukkit.getPluginManager().registerEvents(new TeleportListener(this), this);
         getCommand("back").setExecutor(new BackCommand(this));
 
-        getLogger().info("SimpleBackPlus enabled with persistent history.");
+        getLogger().info("SimpleBackPlus enabled with persistent history and cooldown.");
     }
 
     public static SimpleBackPlus getInstance() {
         return instance;
+    }
+
+    // --- NEW: Cooldown accessors ---
+    public Map<UUID, Long> getBackCooldowns() {
+        return backCooldowns;
+    }
+
+    public int getCooldownSeconds() {
+        return cooldownSeconds;
     }
 
     private void createHistoryFile() {
