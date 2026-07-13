@@ -1,6 +1,5 @@
 package dev.rob2.simplebackplus;
 
-import dev.rob2.combatlogger.CombatAPI;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -33,11 +32,27 @@ public class BackCommand implements CommandExecutor {
 
         UUID uuid = player.getUniqueId();
 
-        // --- COMBAT BLOCK ---
-        if (CombatAPI.isInCombat(uuid)) {
-            long remaining = CombatAPI.getRemainingSeconds(uuid);
-            player.sendMessage("§cYou cannot use /back while in combat. §e" + remaining + "s §cremaining.");
-            return true;
+        // --- OPTIONAL COMBATLOGGER INTEGRATION ---
+        if (plugin.getServer().getPluginManager().getPlugin("CombatLogger") != null) {
+            try {
+                Class<?> apiClass = Class.forName("dev.rob2.combatlogger.CombatAPI");
+
+                boolean inCombat = (boolean) apiClass
+                        .getMethod("isInCombat", UUID.class)
+                        .invoke(null, uuid);
+
+                if (inCombat) {
+                    long remaining = (long) apiClass
+                            .getMethod("getRemainingSeconds", UUID.class)
+                            .invoke(null, uuid);
+
+                    player.sendMessage("§cYou cannot use /back while in combat. §e" + remaining + "s §cremaining.");
+                    return true;
+                }
+
+            } catch (Exception ignored) {
+                // CombatLogger not available or API changed — fail silently
+            }
         }
 
         // --- DEATH BLOCK ---
